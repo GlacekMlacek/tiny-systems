@@ -2,6 +2,18 @@
 
 This repository contains the source code for the tasks for my course **Write your own tiny programming system(s)!** You can find more information about the course on [the official course page](https://d3s.mff.cuni.cz/teaching/nprg077/) (including links to slides and video recordings). The associated slides live in my [Teaching repository](https://github.com/tpetricek/Teaching/).
 
+## Completed:
+-[X] tiny-ml
+-[X] tiny-basic
+-[X] tiny-hm
+-[ ] tiny-prolog
+-[ ] tiny-self
+-[X] tiny-excel
+
+
+Originally, I worked with Scheme, but after returning to this after some time, the Scheme code didn't work (or I just don't remember how to correctly run it)
+so I rewrote it in F#
+
 ### :tv: Follow the course on your own!
 
 Watch the lectures of [Write your own tiny programming system(s)!](https://www.youtube.com/playlist?list=PLRBVoLoCYzDML8e9g58f6zb-faG1rMHIJ) on YouTube!
