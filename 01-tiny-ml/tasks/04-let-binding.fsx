@@ -43,16 +43,36 @@ let rec evaluate (ctx:VariableContext) e =
       | _ -> failwith ("unbound variable: " + v)
 
   // NOTE: You have the following from before
-  | Unary(op, e) -> failwith "implemented in step 2"
-  | If(econd, etrue, efalse) -> failwith "implemented in step 2"
-  | Lambda(v, e) -> failwith "implemented in step 3"
-  | Application(e1, e2) -> failwith "implemented in step 3"
+  | Unary(op, e) ->
+      let v = evaluate ctx e
+      match v with
+      | ValNum n ->
+          match op with
+          | "-" -> ValNum(-n)
+          | _ -> failwith "unsupported unary operator"
+      | _ -> failwith "Uunsopported val type in unary"
+  | If(p, et, ef) ->
+      let pe = evaluate ctx p
+      match pe with
+      | ValNum b ->
+          match b with
+            | 1 -> evaluate ctx et
+            | _ -> evaluate ctx ef
+      | _ -> failwith "unsupported val type in if"
+  | Lambda(v, e) ->
+      ValClosure(v, e, ctx)
+  | Application(e1, e2) ->
+      match evaluate ctx e1 with
+      | ValClosure(v, e, nctx) -> evaluate (Map.add v (evaluate ctx e2) nctx) e
+      | _ -> failwith "was expecting a closure"
 
   | Let(v, e1, e2) ->
+    let arg = evaluate ctx e1
+    let nctx = Map.add v arg ctx
+    evaluate nctx e2
     // TODO: There are two ways to do this! A nice tricky is to 
     // treat 'let' as a syntactic sugar and transform it to the
     // 'desugared' expression and evaluating that :-)
-    failwith "not implemented"
 
 // ----------------------------------------------------------------------------
 // Test cases
@@ -66,7 +86,7 @@ let el1 =
     Binary("+", Variable("x"), 
       Binary("*", Variable("x"), Constant(20)))
   )
-evaluate Map.empty el1
+evaluate Map.empty el1 |> printfn "%A"
 
 // Function calls with let binding
 //   let f = fun x -> x*2 in (f 20) + (f 1)
@@ -82,4 +102,4 @@ let el2 =
       Application(Variable("f"), Constant(1)) 
     )    
   )
-evaluate Map.empty el2
+evaluate Map.empty el2 |> printfn "%A"

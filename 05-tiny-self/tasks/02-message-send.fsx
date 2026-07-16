@@ -16,7 +16,7 @@ and Special =
   | String of string
   | Native of (Objekt -> Objekt)
 
-#load "objekt-visualizer.fs"
+#load "objekt-visualizer.fs" //"
 open TinySelf
 
 // ----------------------------------------------------------------------------
@@ -47,7 +47,10 @@ let makeNativeMethod f =
 
 // NOTE: Implemented in step #1
 let rec lookup (msg:string) (obj:Objekt) : list<Slot> = 
-  failwith "implemented in step 1"
+  let ms = List.filter (fun x -> x.Name = msg) obj.Slots
+  match ms with
+    | slot :: _ -> [slot]
+    | _ -> List.collect (fun x -> lookup msg x.Contents) obj.Slots
 
 
 // See also §3.3.7 (https://handbook.selflanguage.org/SelfHandbook2017.1.pdf)
@@ -69,13 +72,24 @@ let eval (slotValue:Objekt) (instance:Objekt) : Objekt =
   //
   // NOTE: Why do we set the receiver as parent of the activation record?
   // We can then send messages to it directly to access the receiver's slots!
-  failwith "TODO: not implemented"
+  match slotValue.Code with
+  | Some(code) -> let ns = (makeParentSlot "receiver*" instance) :: code.Slots
+                  match code.Special with
+                  | Some(Native f) -> f {code with Slots = ns}
+                  | _ -> failwith "Code not Special"
+  | _ -> slotValue
+  // failwith "TODO: not implemented"
 
 
 let send (msg:string) (instance:Objekt) : Objekt =
   // TODO: Use 'lookup' to find slots with the name of the message 'msg'. If
   // there is exactly one, evaluate it using 'eval', otherwise report an error.
-  failwith "TODO: not implemented"
+  let slots = lookup msg instance
+  match slots with
+  | [slot] -> (eval slot.Contents instance)
+  | _ -> failwith "send fail"
+
+  // failwith "TODO: not implemented"
 
 
 // ----------------------------------------------------------------------------
@@ -85,11 +99,18 @@ let send (msg:string) (instance:Objekt) : Objekt =
 // TODO: Now we can reimplement 'getStringValue' using ordinary 'send'
 // that follows the standard Self semantics (rather than directly)
 let getStringValue (obj:Objekt) : string = 
-  failwith "TODO: not implemented"
+  let value = send "value" obj
+  match value.Special with
+  | Some(s) -> match s with
+               | String(ns) -> ns
+               | _ -> failwith "Not a string"
+  | _ -> failwith "Not a Special"
+  // failwith "TODO: not implemented"
 
 
 // TODO: Define empty object with no data in it (needed below)
-let empty : Objekt = failwith "TODO: not implemented"
+// let empty : Objekt = failwith "TODO: not implemented"
+let empty : Objekt = makeObject []
 
 let printCode = makeNativeMethod (fun arcd ->
   // TODO: Print the string value! To get the string, you can send 'value' 
@@ -99,7 +120,11 @@ let printCode = makeNativeMethod (fun arcd ->
   // 
   // As the first step, see what you actually pass to the method by
   // visualizing the activation record (arcd) using 'Vis.printObjectTree'!
-  failwith "TODO: not implemented"
+  // let value = send "value" arcd
+  // getStringValue value
+  printfn "%s" (getStringValue arcd)
+  empty
+  // failwith "TODO: not implemented"
 )
 
 
@@ -111,7 +136,8 @@ let makeString s =
     makeSlot "value" (makeSpecialObject (String s)) 
     // TODO: Make 'stringPrototype' a parent of this string 
     // object so that we can send the 'print' message to it!
-    failwith "TODO: add a slot here"
+    makeParentSlot "parent*" stringPrototype
+    // failwith "TODO: add a slot here"
   ]
 
 // ----------------------------------------------------------------------------
@@ -123,6 +149,7 @@ let makeString s =
 let hello = makeString "Hello world"
 hello |> send "print"
 
+
 // DEMO: Create and visualize object with multiple string-object slots
 
 let multilang = makeObject [
@@ -133,8 +160,11 @@ let multilang = makeObject [
 ]
 Vis.printObjectTree multilang
 
+// printfn "%s" (getStringValue (send "english" multilang))
+
 multilang |> send "english" |> send "print"
 multilang |> send "czech" |> send "print"
+
 
 
 // ----------------------------------------------------------------------------
@@ -155,12 +185,16 @@ let larry = makeObject [
 // Larry has name & sound, but no book!
 larry |> send "name" |> send "print"
 larry |> send "sound" |> send "print"
-larry |> send "book" |> send "print"
+// larry |> send "book" |> send "print"
 
 let wonderland = makeObject [
   makeSlot "book" (makeString "Alice in Wonderland")
 ]
-let cheshire = failwith "implemented in step 1"
+let cheshire = makeObject [
+  makeParentSlot "parent*" cat
+  makeParentSlot "parent*" wonderland
+  makeSlot "name" (makeString "Cheshire Cat")
+]
 
 // All of these should be OK!
 cheshire |> send "name" |> send "print"

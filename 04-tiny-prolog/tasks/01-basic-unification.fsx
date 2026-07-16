@@ -34,25 +34,29 @@ let rec unifyLists l1 l2 : option<list<string * Term>> =
   match l1, l2 with 
   | [], [] -> 
       // TODO: Succeeds, but returns an empty substitution
-      failwith "not implemented"
+      Some []
   | h1::t1, h2::t2 -> 
       // TODO: Unify 'h1' with 'h2' using 'unify' and
       // 't1' with 't2' using 'unifyLists'. If both 
       // succeed, return the generated joint substitution!
-      failwith "not implemented"
-  | _ -> 
+      match unify h1 h2, unifyLists t1 t2 with
+      | Some h, Some t -> Some(List.append h t)
+      | _ -> None
+  | _ -> None
     // TODO: Lists cannot be unified 
-    failwith "not implemented"
 
 and unify t1 t2 : option<list<string * Term>> = 
   match t1, t2 with 
-  | _ ->
+  | Atom x, Atom y -> if x = y then Some [] else None
+  | Predicate(x, ts1), Predicate(y, ts2) -> if x = y then unifyLists ts1 ts2 else None
+  | Variable x, t
+  | t, Variable x -> Some([(x, t)])
+  | _ -> None
       // TODO: Add all the necessary cases here!
       // * For matching atoms, return empty substitution
       // * For matching predicates, return the result of 'unifyLists'
       // * For variable and any term, return a new substitution
       // * For anything else, return None (failed to unify) 
-      failwith "not implemented"
 
 // ----------------------------------------------------------------------------
 // Basic unification tests 
@@ -62,35 +66,35 @@ and unify t1 t2 : option<list<string * Term>> =
 // Returns: [X -> socrates]
 unify
   (Predicate("human", [Atom("socrates")]))
-  (Predicate("human", [Variable("X")]))
+  (Predicate("human", [Variable("X")])) |> printfn "%A = x -> socrates"
 
 // Example: human(socrates) ~ mortal(X) 
 // Returns: None (fail)
 unify
   (Predicate("human", [Atom("socrates")]))
-  (Predicate("mortal", [Variable("X")]))
+  (Predicate("mortal", [Variable("X")])) |> printfn "%A = none"
 
 // Example: parent(charles, harry) ~ parent(charles, X)
 // Returns: [X -> harry]
 unify
   (Predicate("parent", [Atom("charles"); Atom("harry")]))
-  (Predicate("parent", [Atom("charles"); Variable("X")]))
+  (Predicate("parent", [Atom("charles"); Variable("X")])) |> printfn "%A = x -> harry"
 
 // Example: parent(X, harry) ~ parent(charles, Y)
 // Returns: [X -> charles; Y -> harry]
 unify
   (Predicate("parent", [Variable("X"); Atom("harry")]))
-  (Predicate("parent", [Atom("charles"); Variable("Y")]))
+  (Predicate("parent", [Atom("charles"); Variable("Y")])) |> printfn "%A x -> charles, y -> harry"
 
 // Example: succ(succ(succ(zero))) ~ succ(X)
 // Returns: [X -> succ(succ(zero))]
 unify
   (Predicate("succ", [Predicate("succ", [Predicate("succ", [Atom("zero")])])]))
-  (Predicate("succ", [Variable("X")]))
+  (Predicate("succ", [Variable("X")])) |> printfn "%A = x -> suc(suc(zero))"
 
 // Example: succ(succ(zero)) ~ succ(zero)
 // Returns: None (fail)
 unify
   (Predicate("succ", [Predicate("succ", [Atom("zero")])]))
-  (Predicate("succ", [Atom("zero")]))
+  (Predicate("succ", [Atom("zero")])) |> printfn "%A = none"
 

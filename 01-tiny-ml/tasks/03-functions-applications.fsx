@@ -47,24 +47,39 @@ let rec evaluate (ctx:VariableContext) e =
           | "+" -> ValNum(n1 + n2)
           | "*" -> ValNum(n1 * n2)
           | _ -> failwith "unsupported binary operator"
+      | _ -> failwith "unsupported val type in binary"
   | Variable(v) ->
       match ctx.TryFind v with 
       | Some res -> res
       | _ -> failwith ("unbound variable: " + v)
-
-  // NOTE: You have the following two from before
-  | Unary(op, e) -> failwith "implemented in step 2"
-  | If(econd, etrue, efalse) -> failwith "implemented in step 2"
+  | Unary(op, e) ->
+      let v = evaluate ctx e
+      match v with
+      | ValNum n ->
+          match op with
+          | "-" -> ValNum(-n)
+          | _ -> failwith "unsupported unary operator"
+      | _ -> failwith "Uunsopported val type in unary"
+  | If(p, et, ef) ->
+      let pe = evaluate ctx p
+      match pe with
+      | ValNum b ->
+          match b with
+            | 1 -> evaluate ctx et
+            | _ -> evaluate ctx ef
+      | _ -> failwith "unsupported val type in if"
   
   | Lambda(v, e) ->
       // TODO: Evaluate a lambda - create a closure value
-      failwith "not implemented"
+      ValClosure(v, e, ctx)
 
   | Application(e1, e2) ->
       // TODO: Evaluate a function application. Recursively
       // evaluate 'e1' and 'e2'; 'e1' must evaluate to a closure.
       // You can then evaluate the closure body.
-      failwith "not implemented"
+      match evaluate ctx e1 with
+      | ValClosure(v, e, nctx) -> evaluate (Map.add v (evaluate ctx e2) nctx) e
+      | _ -> failwith "was expecting a closure"
 
 // ----------------------------------------------------------------------------
 // Test cases
@@ -74,7 +89,7 @@ let rec evaluate (ctx:VariableContext) e =
 //   (fun x -> x * 2) 
 let ef1 = 
   Lambda("x", Binary("*", Variable("x"), Constant(2)))
-evaluate Map.empty ef1
+evaluate Map.empty ef1 |> printfn "%A"
 
 // Basic function calls (should return number)
 //   (fun x -> x * 2) 21
@@ -83,7 +98,7 @@ let ef2 =
     Lambda("x", Binary("*", Variable("x"), Constant(2))),
     Constant(21)
   )
-evaluate Map.empty ef2
+evaluate Map.empty ef2 |> printfn "%A"
 
 // Wrong function call (the first argument is not a function)
 //   21 (fun x -> x * 2)
@@ -92,7 +107,7 @@ let ef3 =
     Constant(21),
     Lambda("x", Binary("*", Variable("x"), Constant(2)))
   )
-evaluate Map.empty ef3
+// evaluate Map.empty ef3 |> printfn "%A"  // will fail
 
 // Wrong binary operator (it is now possible to apply '+'
 // to functions; this makes no sense and should fail!)
@@ -102,4 +117,4 @@ let ef4 =
     Constant(21),
     Lambda("x", Binary("*", Variable("x"), Constant(2)))  
   )
-evaluate Map.empty ef4
+// evaluate Map.empty ef4 |> printfn "%A" // will fail

@@ -2,6 +2,7 @@
 // 04 - Random function and (not quite correct) POKE
 // ----------------------------------------------------------------------------
 module TinyBASIC
+open System
 
 type Value =
   | StringValue of string
@@ -29,15 +30,31 @@ type State =
   { Program : list<int * Command> 
     Variables : Map<string, Value> 
     // TODO: You will need to include random number generator in the state!
+    Random : System.Random
     }
 
 // ----------------------------------------------------------------------------
 // Utilities
 // ----------------------------------------------------------------------------
 
-let printValue value = failwith "implemented in steps 1 and 3"
-let getLine state line = failwith "implemented in step 1"
-let addLine state (line, cmd) = failwith "implemented in step 2"
+let printValue value = 
+  match value with
+  | StringValue(s) -> printf "%s" s
+  | NumberValue n -> printf "%d" n
+  | BoolValue b -> printf "%b" b
+
+let getLine state line =
+  match List.tryFind (fun (n, _) -> n = line) state.Program with
+  | Some(newLine) -> newLine
+  | None -> failwith "line does not exist"
+
+let addLine state (line, cmd) = 
+    { state with Program = List.sortBy (fun (n, _) -> n) ((line, cmd) :: (List.filter (fun (n, _) -> n <> line) state.Program)) }
+
+let getNumberValue value =
+  match value with
+  | NumberValue n -> n
+  | _ -> failwith "value is not number"
 
 // ----------------------------------------------------------------------------
 // Evaluator
@@ -50,35 +67,87 @@ let binaryRelOp f args =
   | [NumberValue a; NumberValue b] -> BoolValue(f a b)
   | _ -> failwith "expected two numerical arguments"
 
-let rec evalExpression expr = 
+let binaryBoolOp f args = 
+  match args with 
+  | [BoolValue a; BoolValue b] -> BoolValue(f a b)
+  | _ -> failwith "expected two numerical arguments"
+
+let binaryNumOp f args = 
+  match args with 
+  | [NumberValue a; NumberValue b] -> NumberValue(f a b)
+  | _ -> failwith "expected two numerical arguments"
+
+let rec evalExpression expr state = 
   // TODO: Add support for 'RND(N)' which returns a random number in range 0..N-1
   // and for binary operators ||, <, > (and the ones you have already, i.e., - and =).
   // To add < and >, you can use the 'binaryRelOp' helper above. You can similarly
   // add helpers for numerical operators and binary Boolean operators to make
   // your code a bit nicer.
-  failwith "implemented in steps 1 and 3"
+  match expr with
+  | Const(v) -> v
+  | Function(op, args) ->
+      let eargs = List.map (fun e -> evalExpression e state) args
+      match op with
+      | "RND" -> NumberValue (state.Random.Next(0, getNumberValue (List.head eargs)))
+      | "=" -> binaryRelOp (=) eargs
+      | ">" -> binaryRelOp (>) eargs
+      | "<" -> binaryRelOp (<) eargs
+      | "-" -> binaryNumOp (-) eargs
+      | "||" -> binaryBoolOp (||) eargs
+      | _ -> failwith "unsupported func"
+  | Variable v ->
+      match Map.tryFind v state.Variables with
+      | Some v -> v
+      | None -> failwith "variable not found"
 
 let rec runCommand state (line, cmd) =
   match cmd with 
   | Run ->
       let first = List.head state.Program    
       runCommand state first
-
-  | Print(expr) -> failwith "implemented in step 1"
-  | Goto(line) -> failwith "implemented in step 1"
-  | Assign _ | If _ -> failwith "implemented in step 3"
+  | Goto(line) ->
+      runCommand state (getLine state line)
+  | Print(expr) ->
+      printValue (evalExpression expr state)
+      runNextLine state line
+  | Assign(s, e) -> runNextLine { state with Variables = Map.add s (evalExpression e state) state.Variables } line
+  | If(e, c) ->
+      match evalExpression e state with
+      | BoolValue b -> if b then runCommand state (line, c) else runNextLine state line
+      | _ -> failwith "if was expecting a bool"
   
   // TODO: Implement two commands for screen manipulation
-  | Clear | Poke _ -> failwith "not implemented"
+  | Clear ->
+      Console.Clear()
+      runNextLine state line
+  | Poke(ex, ey, ee) ->
+      let x = evalExpression ex state
+      let y = evalExpression ey state
+      let c = evalExpression ee state
+      match x, y, c with
+      | (NumberValue x, NumberValue y, StringValue e) ->
+          Console.CursorLeft <- x
+          Console.CursorTop <- y
+          Console.Write(e)
+      | _ -> failwith "Poke was expecting int, int, string"
+      runNextLine state line
 
-and runNextLine state line = failwith "implemented in step 1"
+and runNextLine state line =
+  match List.tryFind (fun (n, _) -> n > line) state.Program with
+  | Some(newLine) -> runCommand state newLine
+  | None -> state
 
 // ----------------------------------------------------------------------------
 // Interactive program editing
 // ----------------------------------------------------------------------------
 
-let runInput state (line, cmd) = failwith "implemented in step 2"
-let runInputs state cmds = failwith "implemented in step 2"
+let runInput state (line, cmd) =
+  match line with
+  | Some(ln) -> addLine state (ln, cmd)
+  | None -> runCommand state (System.Int32.MaxValue, cmd)
+
+let runInputs state cmds =
+  List.fold (fun acc cmd -> runInput acc cmd) state cmds
 
 // ----------------------------------------------------------------------------
 // Test cases
@@ -100,7 +169,7 @@ let (.-) a b = Function("-", [a; b])
 let (.=) a b = Function("=", [a; b])
 let (@) s args = Function(s, args)
 
-let empty = { Program = []; Variables = Map.empty } // TODO: Add random number generator!
+let empty = { Program = []; Variables = Map.empty; Random = Random() } // TODO: Add random number generator!
 
 // NOTE: Random stars generation. This has hard-coded max width and height (60x20)
 // but you could use 'System.Console.WindowWidth'/'Height' here to make it nicer.

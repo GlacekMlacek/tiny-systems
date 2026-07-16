@@ -2,6 +2,7 @@
 // 05 - A few more functions and operators
 // ----------------------------------------------------------------------------
 module TinyBASIC
+open System
 
 type Value =
   | StringValue of string
@@ -36,9 +37,24 @@ type State =
 // Utilities
 // ----------------------------------------------------------------------------
 
-let printValue value = failwith "implemented in steps 1 and 3"
-let getLine state line = failwith "implemented in step 1"
-let addLine state (line, cmd) = failwith "implemented in step 2"
+let printValue value = 
+  match value with
+  | StringValue(s) -> printf "%s" s
+  | NumberValue n -> printf "%d" n
+  | BoolValue b -> printf "%b" b
+
+let getLine state line =
+  match List.tryFind (fun (n, _) -> n = line) state.Program with
+  | Some(newLine) -> newLine
+  | None -> failwith "line does not exist"
+
+let addLine state (line, cmd) = 
+    { state with Program = List.sortBy (fun (n, _) -> n) ((line, cmd) :: (List.filter (fun (n, _) -> n <> line) state.Program)) }
+
+let getNumberValue value =
+  match value with
+  | NumberValue n -> n
+  | _ -> failwith "value is not number"
 
 // ----------------------------------------------------------------------------
 // Evaluator
@@ -49,35 +65,92 @@ let binaryRelOp f args =
   | [NumberValue a; NumberValue b] -> BoolValue(f a b)
   | _ -> failwith "expected two numerical arguments"
 
-let rec evalExpression expr = 
+let binaryBoolOp f args = 
+  match args with 
+  | [BoolValue a; BoolValue b] -> BoolValue(f a b)
+  | _ -> failwith "expected two numerical arguments"
+
+let binaryNumOp f args = 
+  match args with 
+  | [NumberValue a; NumberValue b] -> NumberValue(f a b)
+  | _ -> failwith "expected two numerical arguments"
+
+let rec evalExpression expr state = 
   // TODO: We need an extra function 'MIN' that returns the smaller of
   // the two given numbers (in F#, the function 'min' does exactly this.)
-  failwith "implemented in steps 1, 3 and 4"
+  match expr with
+  | Const(v) -> v
+  | Function(op, args) ->
+      let eargs = List.map (fun e -> evalExpression e state) args
+      match op with
+      | "RND" -> NumberValue (state.Random.Next(0, getNumberValue (List.head eargs)))
+      | "MIN" -> NumberValue (List.min (List.map (fun e -> getNumberValue e) eargs))
+      | "=" -> binaryRelOp (=) eargs
+      | ">" -> binaryRelOp (>) eargs
+      | "<" -> binaryRelOp (<) eargs
+      | "-" -> binaryNumOp (-) eargs
+      | "||" -> binaryBoolOp (||) eargs
+      | _ -> failwith "unsupported func"
+  | Variable v ->
+      match Map.tryFind v state.Variables with
+      | Some v -> v
+      | None -> failwith "variable not found"
 
 let rec runCommand state (line, cmd) =
   match cmd with 
   | Run ->
       let first = List.head state.Program    
       runCommand state first
-
-  | Print(expr) -> failwith "implemented in step 1"
-  | Goto(line) -> failwith "implemented in step 1"
-  | Assign _ | If _ -> failwith "implemented in step 3"
-  | Clear | Poke _ -> failwith "implemented in step 4"
+  | Goto(line) ->
+      runCommand state (getLine state line)
+  | Print(exprs) ->
+      List.map printValue (List.map (fun expr -> evalExpression expr state) exprs) |> ignore
+      runNextLine state line
+  | Assign(s, e) -> runNextLine { state with Variables = Map.add s (evalExpression e state) state.Variables } line
+  | If(e, c) ->
+      match evalExpression e state with
+      | BoolValue b -> if b then runCommand state (line, c) else runNextLine state line
+      | _ -> failwith "if was expecting a bool"
+  | Clear ->
+      Console.Clear()
+      runNextLine state line
+  | Poke(ex, ey, ee) ->
+      let x = evalExpression ex state
+      let y = evalExpression ey state
+      let c = evalExpression ee state
+      match x, y, c with
+      | (NumberValue x, NumberValue y, StringValue e) ->
+          Console.CursorLeft <- x
+          Console.CursorTop <- y
+          Console.Write(e)
+      | _ -> failwith "Poke was expecting int, int, string"
+      runNextLine state line
 
   // TODO: Input("X") should read a number from the console using Console.RadLine
   // and parse it as a number using Int32.TryParse (retry if the input is wrong)
   // Stop terminates the execution (you can just return the 'state'.)
-  | Input _ | Stop _ -> failwith "not implemented"
+  | Input name ->
+      match Int32.TryParse (Console.ReadLine()) with
+      | true, x -> runCommand state (line, (Assign(name, Const(NumberValue x))))
+      | _ -> runCommand state (line, (Input name))
+  | Stop -> state
 
-and runNextLine state line = failwith "implemented in step 1"
+and runNextLine state line =
+  match List.tryFind (fun (n, _) -> n > line) state.Program with
+  | Some(newLine) -> runCommand state newLine
+  | None -> state
 
 // ----------------------------------------------------------------------------
 // Interactive program editing
 // ----------------------------------------------------------------------------
 
-let runInput state (line, cmd) = failwith "implemented in step 2"
-let runInputs state cmds = failwith "implemented in step 2"
+let runInput state (line, cmd) =
+  match line with
+  | Some(ln) -> addLine state (ln, cmd)
+  | None -> runCommand state (System.Int32.MaxValue, cmd)
+
+let runInputs state cmds =
+  List.fold (fun acc cmd -> runInput acc cmd) state cmds
 
 // ----------------------------------------------------------------------------
 // Test cases

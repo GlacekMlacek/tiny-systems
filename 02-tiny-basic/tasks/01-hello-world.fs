@@ -33,12 +33,15 @@ type State =
 
 let printValue value = 
   // TODO: Take 'value' of type 'Value', pattern match on it and print it nicely.
-  failwith "not implemented"
+  match value with
+  | StringValue(s) -> printf "%s" s
 
 let getLine state line =
   // TODO: Get a line with a given number from 'state.Program' (this can fail 
   // if the line is not there.) You need this in the 'Goto' command case below.
-  failwith "not implemented"
+  match List.tryFind (fun (n, _) -> n = line) state.Program with
+  | Some(newLine) -> newLine
+  | None -> failwith "line does not exist"
 
 // ----------------------------------------------------------------------------
 // Evaluator
@@ -47,13 +50,14 @@ let getLine state line =
 let rec evalExpression expr = 
   // TODO: Implement evaluation of expressions. The function should take 
   // 'Expression' and return 'Value'. In this step, it is trivial :-)
-  failwith "not implemented"
+  match expr with
+  | Const(v) -> v
 
 let rec runCommand state (line, cmd) =
   match cmd with 
   | Print(expr) ->
       // TODO: Evaluate the expression and print the resulting value here!
-      failwith "not implemented"
+      printValue (evalExpression expr)
       runNextLine state line
   | Run ->
       let first = List.head state.Program    
@@ -61,12 +65,14 @@ let rec runCommand state (line, cmd) =
   | Goto(line) ->
       // TODO: Find the right line of the program using 'getLine' and call 
       // 'runCommand' recursively on the found line to evaluate it.
-      failwith "not implemented"
+      runCommand state (getLine state line)
 
 and runNextLine state line = 
-  // TODO: Find a program line with the number greater than 'line' and evalaute
+  // TODO: Find a program line with the number greater than 'line' and evaluate
   // it using 'runCommand' (if found) or just return 'state' (if not found).
-  failwith "not implemented"
+  match List.tryFind (fun (n, _) -> n > line) state.Program with
+  | Some(newLine) -> runCommand state newLine
+  | None -> state
 
 // ----------------------------------------------------------------------------
 // Test cases

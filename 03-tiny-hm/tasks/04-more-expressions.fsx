@@ -26,19 +26,40 @@ type Type =
 
 let rec occursCheck vcheck ty = 
   // TODO: Add case for 'TyFunction' (need to check both nested types)
-  failwith "not implemented"
+  match ty with
+  | TyVariable s -> s = vcheck
+  | TyList t -> occursCheck vcheck t
+  | TyFunction(t1, t2) -> (occursCheck vcheck t1 ) || (occursCheck vcheck t2)
+  | _ -> false
 
 let rec substType (subst:Map<_, _>) t1 = 
   // TODO: Add case for 'TyFunction' (need to substitute in both nested types)
-  failwith "not implemented"
+  match t1 with
+  | TyVariable v -> if Map.containsKey v subst then substType subst subst.[v] else t1
+  | TyList t -> TyList(substType subst t)
+  | TyFunction(t1, t2) -> TyFunction(substType subst t1, substType subst t2)
+  | _ -> t1
 
 let substConstrs subst cs = 
-  failwith "implemented in step 2"
+  List.map (fun (t1, t2) -> (substType subst t1), (substType subst t2)) cs
  
-let rec solve constraints =
+let rec solve cs =
   // TODO: Add case matching TyFunction(ta1, tb1) and TyFunction(ta2, tb2)
   // This generates two new constraints, equating the argument/return types.
-  failwith "not implemented"
+  match cs with 
+  | [] -> []
+  | (TyNumber, TyNumber)::cs -> solve cs
+  | (TyBool, TyBool)::cs -> solve cs
+  | (TyList t1, TyList t2)::cs -> solve ((t1, t2)::cs)
+  | (TyVariable v, n)::cs
+  | (n, TyVariable v)::cs ->
+      if occursCheck v n then failwith "Cannot be solved (occurs check)"
+      let cs = substConstrs (Map.ofList [(v, n)]) cs
+      let subst = solve cs
+      let n = substType (Map.ofList subst) n
+      (v, n)::subst
+  | (TyFunction(ta1, tb1), TyFunction(ta2, tb2))::cs -> solve ((ta1, ta2)::(tb1, tb2)::cs)
+  | _ -> printfn "%A" cs; failwith "cannot be solved"
 
 
 // ----------------------------------------------------------------------------
@@ -55,30 +76,50 @@ let newTyVariable =
 
 let rec generate (ctx:TypingContext) e = 
   match e with 
-  | Constant _ -> failwith "implemented in step 3"
-  | Binary("+", e1, e2) -> failwith "implemented in step 3"
-  | Binary("=", e1, e2) -> failwith "implemented in step 3"
-  | Binary(op, _, _) -> failwith "implemented in step 3"
-  | Variable v -> failwith "implemented in step 3"
-  | If(econd, etrue, efalse) -> failwith "implemented in step 3"
+  | Constant _ -> TyNumber, []
+  | Binary("+", e1, e2) ->
+      let t1, s1 = generate ctx e1
+      let t2, s2 = generate ctx e2
+      TyNumber, s1 @ s2 @ [ t1, TyNumber; t2, TyNumber ]
+  | Binary("*", e1, e2) ->
+      let t1, s1 = generate ctx e1
+      let t2, s2 = generate ctx e2
+      TyNumber, s1 @ s2 @ [ t1, TyNumber; t2, TyNumber ]
+  | Binary("=", e1, e2) ->
+      let t1, s1 = generate ctx e1
+      let t2, s2 = generate ctx e2
+      TyBool, s1 @ s2 @ [ t1, TyNumber; t2, TyNumber ]
+  | Binary(op, _, _) -> failwithf "Binary operator '%s' not supported." op
+  | Variable v ->  if ctx.ContainsKey v then ctx[v], [] else failwith "var not found"
+  | If(econd, etrue, efalse) ->
+      let tcond, scond = generate ctx econd
+      let ttrue, strue = generate ctx etrue
+      let tfalse, sfalse = generate ctx efalse
+      ttrue, scond @ strue @ sfalse @ [tcond, TyBool; ttrue, tfalse]
 
   | Let(v, e1, e2) ->
       // TODO: Generate type & constraints for 'e1' first and then
       // add the generated type to the typing context for 't2'.
-      failwith "not implemented"
+      let t1, s1 = generate ctx e1
+      let t2, s2 = generate (Map.add v t1 ctx) e2
+      t2, s1 @ s2
   
   | Lambda(v, e) ->
       let targ = newTyVariable()
       // TODO: We do not know what the type of the variable 'v' is, so we 
       // generate a new type variable and add that to the 'ctx'. The
       // resulting type will be 'TyFunction' with 'targ' as argument type.
-      failwith "not implemented"
+      let t, s = generate (Map.add v targ ctx) e
+      TyFunction(targ, t), s
 
   | Application(e1, e2) -> 
       // TODO: Tricky case! We cannot inspect the generated type of 'e1'
       // to see what the argument/return type of the function is. Instead,
       // we have to generate a new type variable and add a constraint.
-      failwith "not implemented"
+      let t = newTyVariable()
+      let t1, s1 = generate ctx e1
+      let t2, s2 = generate ctx e2
+      t, [TyFunction(t2, t), t1] @ s1 @ s2 
   
 
 // ----------------------------------------------------------------------------
@@ -106,7 +147,7 @@ let infer e =
 
 // let x = 10 in x = 10
 Let("x", Constant 10, Binary("=", Variable "x", Constant 10))
-|> infer 
+|> infer |> printfn "%A"
 
 // let f = fun x -> x*2 in (f 20) + (f 1)
 Let("f",
@@ -115,24 +156,24 @@ Let("f",
     Application(Variable("f"), Constant(20)),
     Application(Variable("f"), Constant(1)) 
   ))
-|> infer
+|> infer |> printfn "%A"
 
 // fun x f -> f (f x)
 Lambda("x", Lambda("f", 
   Application(Variable "f", Application(Variable "f", Variable "x"))))
-|> infer
+|> infer |> printfn "%A => fun x f -> f (f x): a -> (a -> a) -> a"
 
 // fun f -> f f 
 // This does not type check due to occurs check
-Lambda("f", 
-  Application(Variable "f", Variable "f"))
-|> infer
+// Lambda("f", 
+//   Application(Variable "f", Variable "f"))
+// |> infer |> printfn "%A -> fails"
 
 // fun f -> f 1 + f (2 = 3) 
 // This does not type check because argument of 'f' cannot be both 'int' and 'bool'
-Lambda("f", 
-  Binary("+",
-    Application(Variable "f", Constant 1),
-    Application(Variable "f", Binary("=", Constant 2, Constant 3))
-  ))
-|> infer
+// Lambda("f", 
+//   Binary("+",
+//     Application(Variable "f", Constant 1),
+//     Application(Variable "f", Binary("=", Constant 2, Constant 3))
+//   ))
+// |> infer |> printfn "%A -> fails"

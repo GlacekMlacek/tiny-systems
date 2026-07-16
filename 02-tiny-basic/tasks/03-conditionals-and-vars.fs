@@ -28,6 +28,7 @@ type Command =
 
 type State = 
   { Program : list<int * Command> 
+    Variables : Map<string, Value> 
     // TODO: Add variable context to the program state
   }
 
@@ -36,17 +37,24 @@ type State =
 // ----------------------------------------------------------------------------
 
 let printValue value = 
-  // TODO: Add support for printing NumberValue and BoolValue
-  failwith "implemented in step 1"
+  match value with
+  | StringValue(s) -> printf "%s" s
+  | NumberValue n -> printf "%d" n
+  | BoolValue b -> printf "%b" b
 
-let getLine state line = failwith "implemented in step 1"
-let addLine state (line, cmd) = failwith "implemented in step 2"
+let getLine state line =
+  match List.tryFind (fun (n, _) -> n = line) state.Program with
+  | Some(newLine) -> newLine
+  | None -> failwith "line does not exist"
+
+let addLine state (line, cmd) = 
+    { state with Program = List.sortBy (fun (n, _) -> n) ((line, cmd) :: (List.filter (fun (n, _) -> n <> line) state.Program)) }
 
 // ----------------------------------------------------------------------------
 // Evaluator
 // ----------------------------------------------------------------------------
 
-let rec evalExpression expr = 
+let rec evalExpression expr state = 
   // TODO: Add support for 'Function' and 'Variable'. For now, handle just the two
   // functions we need, i.e. "-" (takes two numbers & returns a number) and "="
   // (takes two values and returns Boolean). Note that you can test if two
@@ -54,16 +62,29 @@ let rec evalExpression expr =
   //
   // HINT: You will need to pass the program state to 'evalExpression' 
   // in order to be able to handle variables!
-  failwith "implemented in step 1"
+  match expr with
+  | Const(v) -> v
+  | Function("=", [e1; e2]) -> BoolValue(evalExpression e1 state = evalExpression e2 state)
+  | Function("-", [e1; e2]) ->
+      match evalExpression e1 state, evalExpression e2 state with
+      | NumberValue x, NumberValue y -> NumberValue(x - y)
+      | _, _ -> failwith "wrong args for '-'"
+  | Function(_, _) -> failwith "function not implemented"
+  | Variable v ->
+      match Map.tryFind v state.Variables with
+      | Some v -> v
+      | None -> failwith "variable not found"
 
 let rec runCommand state (line, cmd) =
   match cmd with 
   | Run ->
       let first = List.head state.Program    
       runCommand state first
-
-  | Print(expr) -> failwith "implemented in step 1"
-  | Goto(line) -> failwith "implemented in step 1"
+  | Goto(line) ->
+      runCommand state (getLine state line)
+  | Print(expr) ->
+      printValue (evalExpression expr state)
+      runNextLine state line
   
   // TODO: Implement assignment and conditional. Assignment should run the
   // next line after setting the variable value. 'If' is a bit trickier:
@@ -73,22 +94,34 @@ let rec runCommand state (line, cmd) =
   //
   // HINT: If <e> evaluates to TRUE, you can call 'runCommand' recursively with
   // the command in the 'THEN' branch and the current line as the line number.
-  | Assign _ | If _ -> failwith "not implemented"
+  | Assign(s, e) -> runNextLine { state with Variables = Map.add s (evalExpression e state) state.Variables } line
+  | If(e, c) ->
+      match evalExpression e state with
+      | BoolValue b -> if b then runCommand state (line, c) else runNextLine state line
+      | _ -> failwith "if was expecting a bool"
 
-and runNextLine state line = failwith "implemented in step 1"
+and runNextLine state line =
+  match List.tryFind (fun (n, _) -> n > line) state.Program with
+  | Some(newLine) -> runCommand state newLine
+  | None -> state
 
 // ----------------------------------------------------------------------------
 // Interactive program editing
 // ----------------------------------------------------------------------------
 
-let runInput state (line, cmd) = failwith "implemented in step 2"
-let runInputs state cmds = failwith "implemented in step 2"
+let runInput state (line, cmd) =
+  match line with
+  | Some(ln) -> addLine state (ln, cmd)
+  | None -> runCommand state (System.Int32.MaxValue, cmd)
+
+let runInputs state cmds =
+  List.fold (fun acc cmd -> runInput acc cmd) state cmds
 
 // ----------------------------------------------------------------------------
 // Test cases
 // ----------------------------------------------------------------------------
 
-let empty = { Program = [] } // TODO: Add empty variables to the initial state!
+let empty = { Program = []; Variables = Map.empty } // TODO: Add empty variables to the initial state!
 
 let helloOnce = 
   [ Some 10, Print (Const (StringValue "HELLO WORLD\n")) 

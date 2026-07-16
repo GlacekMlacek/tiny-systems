@@ -49,7 +49,7 @@ let eba1 =
     Binary("*", Constant(1), Constant(2)),
     Binary("*", Constant(20), Constant(2)))
 
-evaluate Map.empty eba1
+evaluate Map.empty eba1 |> printfn "%A"
 
 // Basic artihmetic with variables: x + (x*20)
 let eba2 = 
@@ -57,6 +57,7 @@ let eba2 =
     Binary("*", Variable("x"), Constant(20)))
 
 let ctx1 = Map.ofList ["x", ValNum 4]
-evaluate ctx1 eba2
+evaluate ctx1 eba2 |> printfn "%A"
 let ctx2 = Map.ofList ["x", ValNum 2]
-evaluate ctx2 eba2
+evaluate ctx2 eba2 |> printfn "%A"
+

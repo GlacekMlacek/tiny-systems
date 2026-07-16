@@ -22,24 +22,30 @@ let rule p b = { Head = p; Body = b }
 // ----------------------------------------------------------------------------
 
 let rec substitute (subst:Map<string, Term>) term = 
+  match term with
+  | Atom _ -> term
+  | Variable v -> //subst.[v]
+    match Map.tryFind v subst with
+    | Some t -> t
+    | None -> term
+  | Predicate(s, tl) -> Predicate(s, List.map (fun t -> substitute subst t) tl)
   // TODO: Replace variables in 'term' for which there is a
   // replacement specified by 'subst.[var]' with the replacement.
   // You can assume the terms in 'subst' do not contain
   // any of the variables that we want to replace.
-  failwith "not implemented"
 
 
 let substituteSubst (newSubst:Map<string, Term>) (subst:list<string * Term>) = 
+  List.map (fun (s, t) -> (s, substitute newSubst t)) subst
   // TODO: Apply the substitution 'newSubst' to all the terms 
   // in the existing substitiution 'subst'. (We represent one 
   // as a map and the other as a list of pairs, which is a bit 
   // inelegant, but it makes calling this function easier later.)
-  failwith "not implemented"
 
 
 let substituteTerms (subst:Map<string, Term>) (terms:list<Term>) = 
+  List.map (fun t -> substitute subst t) terms
   // TODO: Apply substitution 'subst' to all the terms in 'terms'
-  failwith "not implemented"
 
 
 let rec unifyLists l1 l2 = 
@@ -53,10 +59,27 @@ let rec unifyLists l1 l2 =
   // (2) The substitution 's2' is applied to all terms in substitution 's1' before returning
   //
   // You can look at your ML type inference code. The structure is very similar! 
-  failwith "implemented in step 1"
+  match l1, l2 with 
+  | [], [] -> 
+      Some Map.empty
+  | h1::t1, h2::t2 ->
+      match unify h1 h2 with
+      | Some s1 ->
+          let st1 = substituteTerms s1 t1
+          let st2 = substituteTerms s1 t2
+          match unifyLists st1 st2 with
+          | Some s2 -> Some(Map.fold (fun acc key value -> Map.add key value acc) (Map.ofList (substituteSubst s2 (Map.toList s1))) s2)
+          | None -> None
+      | _ -> None
+  | _ -> None
 
 and unify t1 t2 = 
-  failwith "implemented in step 1"
+  match t1, t2 with 
+  | Atom x, Atom y -> if x = y then Some Map.empty else None
+  | Predicate(x, ts1), Predicate(y, ts2) -> if x = y then unifyLists ts1 ts2 else None
+  | Variable x, t
+  | t, Variable x -> Some(Map.add x t Map.empty)
+  | _ -> None
 
 // ----------------------------------------------------------------------------
 // Advanced unification tests requiring correct substitution
@@ -67,28 +90,28 @@ and unify t1 t2 =
 // Returns: [ X -> narcissus ]
 unify
   (Predicate("loves", [Atom("narcissus"); Atom("narcissus")]))
-  (Predicate("loves", [Variable("X"); Variable("X")]))
+  (Predicate("loves", [Variable("X"); Variable("X")])) |> printfn "%A = x -> narcissus"
 
 // Requires (1)
 // Example: loves(odysseus, penelope) ~ loves(X, X)
 // Returns: None (cannot unify)
 unify
   (Predicate("loves", [Atom("odysseus"); Atom("penelope")]))
-  (Predicate("loves", [Variable("X"); Variable("X")]))
+  (Predicate("loves", [Variable("X"); Variable("X")])) |> printfn "%A = none"
 
 // Requires (1)
 // Example: add(zero, succ(zero)) ~ add(Y, succ(Y))
 // Returns: [ Y -> zero ]
 unify
   (Predicate("add", [Atom("zero"); Predicate("succ", [Atom("zero")])]))
-  (Predicate("add", [Variable("Y"); Predicate("succ", [Variable("Y")])]))
+  (Predicate("add", [Variable("Y"); Predicate("succ", [Variable("Y")])])) |> printfn "%A = y -> zero"
 
 // Requires (2)
 // Example: loves(X, narcissus) ~ loves(Y, X)
 // Returns: [ X -> narcissus; Y -> narcissus ]
 unify
   (Predicate("loves", [Variable("X"); Atom("narcissus")]))
-  (Predicate("loves", [Variable("Y"); Variable("X")]))
+  (Predicate("loves", [Variable("Y"); Variable("X")])) |> printfn "%A = x -> narcissus, y -> narcissus"
 
 // Requires (2)
 // Example: add(succ(X), X) ~ add(Y, succ(Z))
@@ -99,5 +122,5 @@ unify
         Variable("X") ]))
   (Predicate("add", 
       [ Variable("Y"); 
-        Predicate("succ", [Variable("Z")]) ]))
+        Predicate("succ", [Variable("Z")]) ])) |> printfn "%A = x -> succ(Z), y -> succ(succ(Z))"
 

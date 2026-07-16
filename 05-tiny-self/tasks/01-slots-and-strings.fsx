@@ -29,7 +29,7 @@ and Special =
 // Implements a simple terminal-based object visualizer for TinySelf. It 
 // prints objects as boxes with numerical identifiers for tracing references.
 // Use `Vis.printObjectTree obj` to visualize an object `obj`!
-#load "objekt-visualizer.fs"
+#load "objekt-visualizer.fs"  //"
 open TinySelf
 
 // ----------------------------------------------------------------------------
@@ -69,7 +69,11 @@ let rec lookup (msg:string) (obj:Objekt) : list<Slot> =
   // * If there is a slot named 'msg' in 'obj', return that 
   // * Otherwise, return all slots named 'msg' slots in objects 
   //   contained in all the parent slots of 'obj' (concatenate them)
-  failwith "TODO: not implemented"
+  let ms = List.filter (fun x -> x.Name = msg) obj.Slots
+  match ms with
+    | slot :: _ -> [slot]
+    | _ -> List.collect (fun x -> lookup msg x.Contents) obj.Slots
+  // failwith "TODO: not implemented"
 
 // ----------------------------------------------------------------------------
 // Helpers for testing & object construction
@@ -88,14 +92,25 @@ let lookupSlotValue (msg:string) (obj:Objekt) : Objekt  =
   // TODO: Find the slot named 'n' in the object 'o' and return its contents
   // Call 'lookup' to find the possible slots. If there is one, return its contents.
   // If there are more, raise an exception using failwith. 
-  failwith "TODO: not implemented"
+  let sv = lookup msg obj
+  match sv with
+    | [s] -> s.Contents
+    | _ -> failwith "Found more slots in lookupSlotValue"
+  // failwith "TODO: not implemented lsv"
 
 // Get the actual string value from a string object (or fail)
 let getStringValue (obj:Objekt) : string = 
   // TODO: Get the value of 'value' slot using 'lookupSlotValue'
   // This should be an object that has 'Special' set to 'Some str'
   // Return the string value!
-  failwith "TODO: not implemented"
+  let value = lookupSlotValue "value" obj
+  match value.Special with
+  | Some(s) -> match s with
+               | String(ns) -> ns
+               | _ -> failwith "Not a string"
+  | _ -> failwith "Not a Special"
+
+  // failwith "TODO: not implemented gsv"
 
 // Ad-hoc helper for testing that prints a string result of 'lookup'
 let printStringSlot slots = 
@@ -146,7 +161,7 @@ Vis.printObjectTree larry
 // Larry has name & sound, but no book!
 larry |> lookup "name" |> printStringSlot
 larry |> lookup "sound" |> printStringSlot
-larry |> lookup "book" |> printStringSlot
+// larry |> lookup "book" |> printStringSlot
 
 // TODO: Cheshire cat has a name ("Cheshire Cat") and is 
 // both a cat (with parent 'cat') and fictional character 
@@ -154,7 +169,12 @@ larry |> lookup "book" |> printStringSlot
 let wonderland = makeObject [
   makeSlot "book" (makeString "Alice in Wonderland")
 ]
-let cheshire = failwith "TODO: not implemented"
+// let cheshire = failwith "TODO: not implemented"
+let cheshire = makeObject [
+  makeParentSlot "parent*" cat
+  makeParentSlot "parent*" wonderland
+  makeSlot "name" (makeString "Cheshire Cat")
+]
 Vis.printObjectTree cheshire
 
 // All of these should be OK!

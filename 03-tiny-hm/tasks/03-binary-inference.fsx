@@ -22,14 +22,32 @@ type Type =
 // ----------------------------------------------------------------------------
 
 let rec occursCheck vcheck ty = 
-  failwith "implemented in step 2"
+  match ty with
+  | TyVariable s -> s = vcheck
+  | TyList t -> occursCheck vcheck t
+  | _ -> false
 let rec substType (subst:Map<_, _>) t1 = 
-  failwith "implemented in step 2"
+  match t1 with
+  | TyVariable v -> if Map.containsKey v subst then substType subst subst.[v] else t1
+  | TyList t -> TyList(substType subst t)
+  | _ -> t1
 let substConstrs subst cs = 
-  failwith "implemented in step 2"
+  List.map (fun (t1, t2) -> (substType subst t1), (substType subst t2)) cs
  
-let rec solve constraints =
-  failwith "implemente in step 2"
+let rec solve cs =
+  match cs with 
+  | [] -> []
+  | (TyNumber, TyNumber)::cs -> solve cs
+  | (TyBool, TyBool)::cs -> solve cs
+  | (TyList t1, TyList t2)::cs -> solve ((t1, t2)::cs)
+  | (TyVariable v, n)::cs
+  | (n, TyVariable v)::cs ->
+      if occursCheck v n then failwith "Cannot be solved (occurs check)"
+      let cs = substConstrs (Map.ofList [(v, n)]) cs
+      let subst = solve cs
+      let n = substType (Map.ofList subst) n
+      (v, n)::subst
+  | _ -> printfn "%A" cs; failwith "cannot be solved"
 
 // ----------------------------------------------------------------------------
 // Constraint generation & inference
@@ -40,6 +58,7 @@ let rec solve constraints =
 type TypingContext = Map<string, Type>
 
 let rec generate (ctx:TypingContext) e = 
+  (*printfn "%A" e*)
   match e with 
   | Constant _ -> 
       // NOTE: If the expression is a constant number, we return
@@ -55,20 +74,25 @@ let rec generate (ctx:TypingContext) e =
 
   | Binary("=", e1, e2) ->
       // TODO: Similar to the case for '+' but returns 'TyBool'
-      failwith "not implemented"
+      let t1, s1 = generate ctx e1
+      let t2, s2 = generate ctx e2
+      TyBool, s1 @ s2 @ [ t1, TyNumber; t2, TyNumber ]
 
   | Binary(op, _, _) ->
       failwithf "Binary operator '%s' not supported." op
 
   | Variable v -> 
       // TODO: Just get the type of the variable from 'ctx' here.
-      failwith "not implemented"
+      if ctx.ContainsKey v then ctx[v], [] else failwith "var not found"
 
   | If(econd, etrue, efalse) ->
       // TODO: Call generate recursively on all three sub-expressions,
       // collect all constraints and add a constraint that (i) the type
       // of 'econd' is 'TyBool' and (ii) types of 'etrue' and 'efalse' match.
-      failwith "not implemented"
+      let tcond, scond = generate ctx econd
+      let ttrue, strue = generate ctx etrue
+      let tfalse, sfalse = generate ctx efalse
+      ttrue, scond @ strue @ sfalse @ [tcond, TyBool; ttrue, tfalse]
 
 
 // ----------------------------------------------------------------------------
@@ -86,7 +110,7 @@ let e1 =
 let t1, cs1 = 
   generate (Map.ofList ["x", TyVariable "a"]) e1
 
-solve cs1
+solve cs1 |> printfn "%A -> x:a:int"
 
 // Simple expressions: if x then 2 + 1 else y
 // Assuming x:'a, y:'b, infers 'a = bool, 'b = int
@@ -98,7 +122,7 @@ let e2 =
 let t2, cs2 = 
   generate (Map.ofList ["x", TyVariable "a"; "y", TyVariable "b"]) e2
 
-solve cs2
+solve cs2 |> printfn "%A -> x:a:bool, y:b:int"
 
 // Simple expressions: if x then 2 + 1 else x
 // Cannot be solved, because 'x' used as 'int' and 'bool'
@@ -110,4 +134,4 @@ let e3 =
 let t3, cs3 = 
   generate (Map.ofList ["x", TyVariable "a"; "y", TyVariable "b"]) e3
 
-solve cs3
+(*solve cs3 |> printfn "%A -> fails"*)

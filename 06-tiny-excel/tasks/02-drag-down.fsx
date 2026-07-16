@@ -26,7 +26,13 @@ let rec relocateReferences (srcCol, srcRow) (tgtCol, tgtRow) (srcExpr:Expr) =
   // to address (tgtRow, tgtCol). So for example, if a formula 'A1+A2' is
   // moved from 'A3' to 'B10' then it should change to 'B8+B9' (address
   // is incremented by column difference 1 and row difference 7)
-  failwith "not implemented!"
+  let diffCol = tgtCol - srcCol
+  let diffRow = tgtRow - srcRow
+  match srcExpr with
+  | Const(v) -> Const(v)
+  | Reference(col, row) -> Reference(Address(col + diffCol,row + diffRow))
+  | Function(s, es) -> Function(s, List.map(fun x -> relocateReferences (srcCol, srcRow) (tgtCol, tgtRow) x) es)
+  // failwith "not implemented!"
 
 
 let expand (srcCol, srcRow) (tgtCol, tgtRow) (sheet:Sheet) : Sheet = 
@@ -39,15 +45,43 @@ let expand (srcCol, srcRow) (tgtCol, tgtRow) (sheet:Sheet) : Sheet =
   // but you need to figure out the right syntax! Once you generate
   // new cells, you can add them to the Map using List.fold (with the 
   // sheet as the current state, updated in each step using Map.add).
-  failwith "not implemented!"
+  // let ah = printfn "%A" sheet
+  let expr = Map.tryFind (Address (srcCol, srcRow)) sheet
+  match expr with
+  | Some(formula) ->
+        let newSheet = [ yield! Map.toSeq sheet
+                         for col in seq {srcCol .. tgtCol} do
+                            for row in seq {srcRow .. tgtRow} do
+                                yield Address(col, row), relocateReferences (srcCol, srcRow) (col, row) formula ]
+        newSheet |> Map.ofList
+  | None -> Map.empty
+  // failwith "not implemented!"
 
 
 // ----------------------------------------------------------------------------
 // Simple recursive evaluator
 // ----------------------------------------------------------------------------
 
+let evalBinHelp x y func = 
+  match x, y with
+  | Number(x), Number(y) -> Number(func x y)
+  | _, _ -> Error("unknown value")
+
+
 let rec eval (sheet:Sheet) expr = 
-  failwith "implemented in step 1"
+  match expr with
+    | Const c -> c
+    | Reference adr -> 
+        let nexpr = Map.tryFind adr sheet
+        match nexpr with
+        | Some(nexpr) -> eval sheet nexpr
+        | None -> Error("reference not found")
+    | Function(s, es)-> 
+        let mappedList = List.map(fun x -> eval sheet x) es
+        match s with
+        | "+" -> mappedList |> List.fold(fun acc x -> evalBinHelp acc x (fun a b -> a + b)) (Number 0)
+        | "*" -> mappedList |> List.fold(fun acc x -> evalBinHelp acc x (fun a b -> a * b)) (Number 1)
+        | _ -> Error("function not defined")
 
 
 // ----------------------------------------------------------------------------
@@ -55,7 +89,7 @@ let rec eval (sheet:Sheet) expr =
 // ----------------------------------------------------------------------------
 
 let addr (s:string) = 
-  failwith "implemented in step 1"
+  Address(int s.[0] - 65, int s.[1..])
 
 
 let fib =  
@@ -65,17 +99,19 @@ let fib =
   |> Map.ofList
   |> expand (addr "A3") (addr "A10")
 
+printfn "fib: %A" fib
+
 // Should return: Number 13
-eval fib (Reference(addr "A8"))
+eval fib (Reference(addr "A8")) |> printfn "A8(13): %A"
 
 // Should return: Number 21
-eval fib (Reference(addr "A9"))
+eval fib (Reference(addr "A9")) |> printfn "A9(21): %A"
 
 // Should return: Number 34
-eval fib (Reference(addr "A10"))
+eval fib (Reference(addr "A10")) |> printfn "A10(34): %A"
 
 // Should return: Error "Missing value"
-eval fib (Reference(addr "A11"))
+eval fib (Reference(addr "A11")) |> printfn "A11(err): %A"
 
 
 // Column 'A' is a sequence of numbers increasing by 1
@@ -91,9 +127,9 @@ let fac =
   |> expand (addr "B2") (addr "B11")
 
 // A6 should be 5, B6 should be 120
-eval fac (Reference(addr "A6"))
-eval fac (Reference(addr "B6"))
+eval fac (Reference(addr "A6")) |> printfn "%A"
+eval fac (Reference(addr "B6")) |> printfn "%A"
 
 // A11 should be 10, B11 should be 3628800
-eval fac (Reference(addr "A11"))
-eval fac (Reference(addr "B11"))
+eval fac (Reference(addr "A11")) |> printfn "%A"  
+eval fac (Reference(addr "B11")) |> printfn "%A"  
